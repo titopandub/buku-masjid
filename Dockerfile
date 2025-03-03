@@ -1,14 +1,28 @@
 # ================
 # Base Stage
 # ================
-FROM serversideup/php:8.1-fpm-nginx as base
+FROM serversideup/php:8.1-fpm-nginx AS base
 ENV AUTORUN_ENABLED=false
 ENV SSL_MODE=off
+
+ARG GROUP_ID=1000
+ARG USER_ID=1000
+
+ARG USERNAME=bukumasjid
+ARG GROUP=$USERNAME
+
+USER root:root
+RUN groupadd -r $GROUP --gid=$GROUP_ID \
+    && useradd --create-home -r $USERNAME -g $GROUP --uid=$USER_ID \
+    && mkdir -p /etc/sudoers.d/ \
+    && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME \
+    && chown -R $USERNAME:$GROUP .
 
 # ================
 # Production Stage
 # ================
-FROM base as production
+FROM base AS production
 
 ENV APP_ENV=production
 ENV APP_DEBUG=false
@@ -23,11 +37,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/*
 
-USER $PUID:$PGID
-
 # Copy contents.
 # - To ignore files or folders, use .dockerignore
-COPY --chown=$PUID:$PGID . .
+COPY --chown=$USERNAME:$GROUP . .
 
 RUN composer install --optimize-autoloader --no-dev --no-interaction --no-progress --ansi
 COPY .env.example .env.tmp

@@ -1,10 +1,15 @@
-version: "3"
 services:
   server:
     restart: unless-stopped
-    image: ghcr.io/buku-masjid/buku-masjid:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USER_NAME: bukumasjid
     ports:
-      - "8000:80"
+      - "8000:8000"
     depends_on:
       - mysql
     environment:
@@ -17,6 +22,10 @@ services:
       - .env
     networks:
       - web-dev
+    volumes:
+      - ./www.conf:/usr/local/etc/php-fpm.d/www.conf
+      - ./storage:/var/www/html/storage
+    command: ["/bin/sh", "-c", "php artisan serve --host=0.0.0.0 --port=8000"]
 
   mysql:
     hostname: mysql_host
@@ -24,7 +33,7 @@ services:
     platform: linux/x86_64
     image: "mysql:5.7"
     ports:
-      - "3307:3306"
+      - "3306:3306"
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
     environment:
       MYSQL_ROOT_PASSWORD: root
