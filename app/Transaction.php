@@ -111,4 +111,54 @@ class Transaction extends Model
     {
         return $this->morphMany(File::class, 'fileable');
     }
+
+    /**
+     * Convert transaction to WhatsApp markdown message.
+     *
+     * @return string
+     */
+    public function toWhatsAppMessage(): string
+    {
+        return formatTransactionForWhatsApp($this);
+    }
+
+    /**
+     * Generate WhatsApp report for transactions in a given period.
+     *
+     * @param  string  $startDate
+     * @param  string  $endDate
+     * @param  float|null  $startBalance
+     * @param  string|null  $organizationName
+     * @param  string|null  $organizationLocation
+     * @param  int|null  $bookId
+     * @return string
+     */
+    public static function generateWhatsAppReport(
+        string $startDate,
+        string $endDate,
+        ?float $startBalance = null,
+        ?string $organizationName = null,
+        ?string $organizationLocation = null,
+        ?int $bookId = null
+    ): string {
+        $query = static::with(['category', 'partner', 'bankAccount'])
+            ->whereBetween('date', [$startDate, $endDate])
+            ->orderBy('date')
+            ->orderBy('in_out', 'desc'); // Income first, then spending
+
+        if ($bookId) {
+            $query->where('book_id', $bookId);
+        }
+
+        $transactions = $query->get();
+
+        return formatTransactionsForWhatsAppReport(
+            $transactions,
+            $startDate,
+            $endDate,
+            $startBalance,
+            $organizationName,
+            $organizationLocation
+        );
+    }
 }

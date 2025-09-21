@@ -162,4 +162,198 @@ class TransactionTest extends TestCase
         $this->assertInstanceOf(Collection::class, $transaction->files);
         $this->assertInstanceOf(File::class, $transaction->files->first());
     }
+
+    /** @test */
+    public function transaction_can_be_formatted_for_whatsapp()
+    {
+        $user = $this->loginAsUser();
+        $category = factory(Category::class)->create([
+            'creator_id' => $user->id,
+            'name' => 'Infaq'
+        ]);
+        $partner = factory(Partner::class)->create(['name' => 'John Doe']);
+        $bankAccount = factory(BankAccount::class)->create([
+            'creator_id' => $user->id,
+            'name' => 'QRIS'
+        ]);
+
+        $transaction = factory(Transaction::class)->create([
+            'date' => '2025-08-08',
+            'amount' => 100000,
+            'in_out' => 1,
+            'description' => 'Donasi untuk masjid',
+            'category_id' => $category->id,
+            'partner_id' => $partner->id,
+            'bank_account_id' => $bankAccount->id,
+        ]);
+
+        $whatsappMessage = $transaction->toWhatsAppMessage();
+
+        $this->assertIsString($whatsappMessage);
+        $this->assertStringContainsString('*Jumat, 8 Agustus 2025*', $whatsappMessage);
+        $this->assertStringContainsString('Infaq dari John Doe', $whatsappMessage);
+        $this->assertStringContainsString('Rp 100.000', $whatsappMessage);
+        $this->assertStringContainsString('(QRIS)', $whatsappMessage);
+        $this->assertStringContainsString('Keterangan: Donasi untuk masjid', $whatsappMessage);
+    }
+
+    /** @test */
+    public function transaction_whatsapp_format_handles_anonymous_partner()
+    {
+        $user = $this->loginAsUser();
+        $category = factory(Category::class)->create([
+            'creator_id' => $user->id,
+            'name' => 'Infaq'
+        ]);
+
+        $transaction = factory(Transaction::class)->create([
+            'date' => '2025-08-08',
+            'amount' => 25000,
+            'in_out' => 1,
+            'category_id' => $category->id,
+            'partner_id' => null,
+        ]);
+
+        $whatsappMessage = $transaction->toWhatsAppMessage();
+
+        $this->assertStringContainsString('Infaq dari Hamba Allah', $whatsappMessage);
+        $this->assertStringContainsString('Rp 25.000', $whatsappMessage);
+    }
+
+    /** @test */
+    public function transaction_whatsapp_format_handles_cash_transactions()
+    {
+        $user = $this->loginAsUser();
+        $category = factory(Category::class)->create([
+            'creator_id' => $user->id,
+            'name' => 'Kebersihan'
+        ]);
+
+        $transaction = factory(Transaction::class)->create([
+            'date' => '2025-08-10',
+            'amount' => 400000,
+            'in_out' => 0,
+            'category_id' => $category->id,
+            'bank_account_id' => null,
+        ]);
+
+        $whatsappMessage = $transaction->toWhatsAppMessage();
+
+        $this->assertStringContainsString('*Ahad, 10 Agustus 2025*', $whatsappMessage);
+        $this->assertStringContainsString('Kebersihan dari Hamba Allah', $whatsappMessage);
+        $this->assertStringContainsString('Rp 400.000', $whatsappMessage);
+        $this->assertStringNotContainsString('(', $whatsappMessage); // No payment method for cash
+    }
+
+    /** @test */
+    public function can_generate_whatsapp_report_for_period()
+    {
+        $user = $this->loginAsUser();
+
+        // Create categories
+        $infaqCategory = factory(Category::class)->create([
+            'creator_id' => $user->id,
+            'name' => 'Infaq'
+        ]);
+        $kebersihanCategory = factory(Category::class)->create([
+            'creator_id' => $user->id,
+            'name' => 'Kebersihan'
+        ]);
+
+        // Create bank account
+        $qrisBankAccount = factory(BankAccount::class)->create([
+            'creator_id' => $user->id,
+            'name' => 'QRIS'
+        ]);
+
+        // Create partner
+        $partner = factory(Partner::class)->create(['name' => 'Ahmad']);
+
+        // Create income transactions
+        factory(Transaction::class)->create([
+            'date' => '2025-09-15',
+            'amount' => 100000,
+            'in_out' => 1,
+            'category_id' => $infaqCategory->id,
+            'partner_id' => $partner->id,
+            'bank_account_id' => null, // Cash
+        ]);
+
+        factory(Transaction::class)->create([
+            'date' => '2025-09-15',
+            'amount' => 25000,
+            'in_out' => 1,
+            'category_id' => $infaqCategory->id,
+            'partner_id' => null, // Anonymous
+            'bank_account_id' => $qrisBankAccount->id,
+        ]);
+
+        // Create spending transaction
+        factory(Transaction::class)->create([
+            'date' => '2025-09-17',
+            'amount' => 400000,
+            'in_out' => 0,
+            'category_id' => $kebersihanCategory->id,
+            'partner_id' => null,
+            'bank_account_id' => null,
+        ]);
+
+        $report = Transaction::generateWhatsAppReport(
+            '2025-09-14',
+            '2025-09-20',
+            838500,
+            'MUSHOLLA EL-FATIH',
+            'DeKhirani Village'
+        );
+
+        $this->assertIsString($report);
+        $this->assertStringContainsString('Assalamualaikum Warahmatullahi Wabarakatuh', $report);
+        $this->assertStringContainsString('*LAPORAN KEUANGAN*', $report);
+        $this->assertStringContainsString('*MUSHOLLA EL-FATIH*', $report);
+        $this->assertStringContainsString('🕌 DeKhirani Village', $report);
+        $this->assertStringContainsString('*🗓️ Periode: 14 - 20 September 2025*', $report);
+        $this->assertStringContainsString('*Saldo Awal (per 13 September 2025):*', $report);
+        $this->assertStringContainsString('*Rp 838.500*', $report);
+
+        // Income section
+        $this->assertStringContainsString('*🤲 PEMASUKAN*', $report);
+        $this->assertStringContainsString('*Selasa, 15 September 2025*', $report);
+        $this->assertStringContainsString('* Infaq dari Ahmad: Rp 100.000', $report);
+        $this->assertStringContainsString('* Infaq dari Hamba Allah: Rp 25.000 (QRIS)', $report);
+        $this->assertStringContainsString('*Total Pemasukan: Rp 125.000*', $report);
+
+        // Spending section
+        $this->assertStringContainsString('*📤 PENGELUARAN*', $report);
+        $this->assertStringContainsString('*Kamis, 17 September 2025*', $report);
+        $this->assertStringContainsString('* Kebersihan: Rp 400.000', $report);
+        $this->assertStringContainsString('*Total Pengeluaran: Rp 400.000*', $report);
+
+        // End balance
+        $this->assertStringContainsString('*💰 SALDO AKHIR KAS (per 20 September 2025)*', $report);
+        $this->assertStringContainsString('*Rp 563.500*', $report); // 838500 + 125000 - 400000
+
+        // Footer
+        $this->assertStringContainsString('Jazakumullahu Khairan Katsiran', $report);
+        $this->assertStringContainsString('*DKM MUSHOLLA EL-FATIH*', $report);
+    }
+
+    /** @test */
+    public function whatsapp_report_handles_empty_period()
+    {
+        $user = $this->loginAsUser();
+
+        $report = Transaction::generateWhatsAppReport(
+            '2025-09-14',
+            '2025-09-20',
+            500000,
+            'MUSHOLLA TEST'
+        );
+
+        $this->assertIsString($report);
+        $this->assertStringContainsString('*LAPORAN KEUANGAN*', $report);
+        $this->assertStringContainsString('*MUSHOLLA TEST*', $report);
+        $this->assertStringNotContainsString('*🤲 PEMASUKAN*', $report);
+        $this->assertStringNotContainsString('*📤 PENGELUARAN*', $report);
+        $this->assertStringContainsString('*Rp 500.000*', $report); // Same start and end balance
+    }
 }

@@ -85,6 +85,7 @@ Route::group(['middleware' => 'auth'], function () {
 
         Route::get('/finance/detailed', 'Reports\InternalFinanceController@detailed')->name('reports.finance.detailed');
         Route::get('/finance/detailed_pdf', 'Reports\InternalFinanceController@detailedPdf')->name('reports.finance.detailed_pdf');
+        Route::get('/finance/detailed_whatsapp', 'Reports\InternalFinanceController@detailedWhatsApp')->name('reports.finance.detailed_whatsapp');
     });
 
     /*

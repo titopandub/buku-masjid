@@ -146,3 +146,198 @@ function get_percent($numerator, $denominator)
 
     return $formatedString;
 }
+
+/**
+ * Format transaction to WhatsApp markdown message.
+ *
+ * @param  \App\Transaction  $transaction
+ * @return string
+ */
+function formatTransactionForWhatsApp(\App\Transaction $transaction): string
+{
+    // Get transaction type icon and label
+    $typeIcon = $transaction->in_out ? '🤲' : '📤';
+    $typeLabel = $transaction->in_out ? 'PEMASUKAN' : 'PENGELUARAN';
+
+    // Format date to Indonesian format
+    $date = \Carbon\Carbon::parse($transaction->date);
+    $dayName = $date->isoFormat('dddd');
+    if ($dayName == 'Minggu') {
+        $dayName = 'Ahad';
+    }
+    $formattedDate = $dayName . ', ' . $date->isoFormat('D MMMM Y');
+
+    // Format amount
+    $amount = 'Rp ' . format_number($transaction->amount);
+
+    // Get partner name or default to "Hamba Allah"
+    $partnerName = $transaction->partner ? $transaction->partner->name : 'Hamba Allah';
+
+    // Get category name or default
+    $categoryName = $transaction->category ? $transaction->category->name : __('transaction.no_category');
+
+    // Get bank account or payment method
+    $paymentMethod = $transaction->bankAccount->name ?? __('transaction.cash');
+
+    // Build the message
+    $message = "*{$formattedDate}*\n";
+    $message .= "* {$categoryName} dari {$partnerName}: {$amount}";
+
+    // Add payment method if not cash
+    if ($paymentMethod !== __('transaction.cash')) {
+        $message .= " ({$paymentMethod})";
+    }
+
+    // Add description if available
+    if (!empty($transaction->description)) {
+        $message .= "\n  Keterangan: {$transaction->description}";
+    }
+
+    return $message;
+}
+
+/**
+ * Format transactions for a period into WhatsApp markdown report.
+ *
+ * @param  \Illuminate\Database\Eloquent\Collection  $transactions
+ * @param  string  $startDate
+ * @param  string  $endDate
+ * @param  float|null  $startBalance
+ * @param  string|null  $organizationName
+ * @param  string|null  $organizationLocation
+ * @return string
+ */
+function formatTransactionsForWhatsAppReport(
+    $transactions,
+    string $startDate,
+    string $endDate,
+    ?float $startBalance = null,
+    ?string $organizationName = null,
+    ?string $organizationLocation = null
+): string {
+    $startDate = \Carbon\Carbon::parse($startDate);
+    $endDate = \Carbon\Carbon::parse($endDate);
+
+    // Default organization info
+    $orgName = $organizationName ?? 'MUSHOLLA/MASJID';
+    $orgLocation = $organizationLocation ?? '';
+
+    // Build header
+    $message = "Assalamualaikum Warahmatullahi Wabarakatuh\n\n\n\n";
+    $message .= "*LAPORAN KEUANGAN*\n\n";
+    $message .= "*{$orgName}*\n\n";
+    if ($orgLocation) {
+        $message .= "🕌 {$orgLocation}\n\n\n\n";
+    }
+
+    // Period
+    $periodText = "*🗓️ Periode: " . $startDate->isoFormat('DD') . " - " . $endDate->isoFormat('DD MMMM Y') . "*\n\n\n\n";
+    $message .= $periodText;
+
+    $message .= "Berikut kami sampaikan rincian keuangan {$orgName} untuk periode ini:\n\n\n\n";
+
+    // Start balance
+    if ($startBalance !== null) {
+        $prevDate = $startDate->copy()->subDay();
+        $message .= "*Saldo Awal (per " . $prevDate->isoFormat('DD MMMM Y') . "):*\n";
+        $message .= "*Rp " . format_number($startBalance) . "*\n\n\n\n";
+    }
+
+    // Group transactions by type and date
+    $incomeTransactions = $transactions->where('in_out', 1)->groupBy('date');
+    $spendingTransactions = $transactions->where('in_out', 0)->groupBy('date');
+
+    // PEMASUKAN section
+    if ($incomeTransactions->isNotEmpty()) {
+        $message .= "*🤲 PEMASUKAN*\n";
+        $message .= "Berikut rincian infaq yang masuk:\n\n\n\n";
+
+        foreach ($incomeTransactions as $date => $dayTransactions) {
+            $carbonDate = \Carbon\Carbon::parse($date);
+            $dayName = $carbonDate->isoFormat('dddd');
+            if ($dayName == 'Minggu') {
+                $dayName = 'Ahad';
+            }
+            $formattedDate = $dayName . ', ' . $carbonDate->isoFormat('D MMMM Y');
+
+            $message .= "*{$formattedDate}*\n";
+
+            foreach ($dayTransactions as $transaction) {
+                $partnerName = $transaction->partner ? $transaction->partner->name : 'Hamba Allah';
+                $categoryName = $transaction->category ? $transaction->category->name : 'Infaq';
+                $amount = 'Rp ' . format_number($transaction->amount);
+                $paymentMethod = $transaction->bankAccount->name ?? __('transaction.cash');
+
+                $message .= "* {$categoryName} dari {$partnerName}: {$amount}";
+
+                if ($paymentMethod !== __('transaction.cash')) {
+                    $message .= " ({$paymentMethod})";
+                }
+                $message .= "\n";
+            }
+            $message .= "\n\n";
+        }
+
+        $totalIncome = $transactions->where('in_out', 1)->sum('amount');
+        $message .= "*Total Pemasukan: Rp " . format_number($totalIncome) . "*\n\n\n\n";
+    }
+
+    // PENGELUARAN section
+    if ($spendingTransactions->isNotEmpty()) {
+        $message .= "*📤 PENGELUARAN*\n";
+        $message .= "Berikut rincian pengeluaran:\n\n\n\n";
+
+        foreach ($spendingTransactions as $date => $dayTransactions) {
+            $carbonDate = \Carbon\Carbon::parse($date);
+            $dayName = $carbonDate->isoFormat('dddd');
+            if ($dayName == 'Minggu') {
+                $dayName = 'Ahad';
+            }
+            $formattedDate = $dayName . ', ' . $carbonDate->isoFormat('D MMMM Y');
+
+            $message .= "*{$formattedDate}*\n";
+
+            $dayTotal = 0;
+            foreach ($dayTransactions as $transaction) {
+                $categoryName = $transaction->category ? $transaction->category->name : 'Pengeluaran';
+                $amount = 'Rp ' . format_number($transaction->amount);
+                $paymentMethod = $transaction->bankAccount->name ?? '';
+
+                $message .= "* {$categoryName}: {$amount}";
+
+                if ($paymentMethod && $paymentMethod !== __('transaction.cash')) {
+                    $message .= " ({$paymentMethod})";
+                }
+                $message .= "\n";
+
+                $dayTotal += $transaction->amount;
+            }
+
+            if ($dayTransactions->count() > 1) {
+                $message .= "\nTotal: *Rp " . format_number($dayTotal) . "*\n";
+            }
+            $message .= "\n\n";
+        }
+
+        $totalSpending = $transactions->where('in_out', 0)->sum('amount');
+        $message .= "*Total Pengeluaran: Rp " . format_number($totalSpending) . "*\n\n\n\n";
+    }
+
+    // End balance
+    $totalIncome = $transactions->where('in_out', 1)->sum('amount');
+    $totalSpending = $transactions->where('in_out', 0)->sum('amount');
+    $endBalance = ($startBalance ?? 0) + $totalIncome - $totalSpending;
+
+    $message .= "*💰 SALDO AKHIR KAS (per " . $endDate->isoFormat('DD MMMM Y') . ")*\n";
+    $message .= "*Rp " . format_number($endBalance) . "*\n\n\n\n";
+
+    // Footer
+    $message .= "Demikian laporan kas ini kami sampaikan.\n\n\n\n";
+    $message .= "Terima kasih kepada para jama'ah dan donatur yang telah menyisihkan hartanya untuk kemakmuran {$orgName}. ";
+    $message .= "Semoga Allah SWT membalas setiap kebaikan yang diberikan.\n\n\n\n";
+    $message .= "Jazakumullahu Khairan Katsiran.\n\n\n\n";
+    $message .= "Hormat kami,\n";
+    $message .= "*DKM {$orgName}*";
+
+    return $message;
+}

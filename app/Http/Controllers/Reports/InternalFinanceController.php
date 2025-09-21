@@ -204,6 +204,36 @@ class InternalFinanceController extends FinanceController
         return $pdf->stream(__('report.weekly', ['year_month' => $currentMonthEndDate->isoFormat('MMMM Y')]).'.pdf');
     }
 
+    public function detailedWhatsApp(Request $request)
+    {
+        $startDate = $this->getStartDate($request);
+        $endDate = $this->getEndDate($request);
+        $book = auth()->activeBook();
+
+        // Get start balance from the day before the start date
+        $lastMonthDate = $startDate->clone()->subDay();
+        $startBalance = $book->getBalance($lastMonthDate->format('Y-m-d'));
+
+        // Get organization info from settings
+        $organizationName = Setting::get('masjid_name', config('masjid.name')) ?: 'MUSHOLLA/MASJID';
+        $organizationLocation = Setting::get('masjid_address', '');
+
+        // Generate WhatsApp report
+        $whatsappReport = \App\Transaction::generateWhatsAppReport(
+            $startDate->format('Y-m-d'),
+            $endDate->format('Y-m-d'),
+            $startBalance,
+            $organizationName,
+            $organizationLocation,
+            $book->id
+        );
+
+        // Return the report as a text response that can be copied
+        return response($whatsappReport)
+            ->header('Content-Type', 'text/plain; charset=utf-8')
+            ->header('Content-Disposition', 'attachment; filename="laporan-whatsapp-'.$startDate->format('Y-m-d').'-'.$endDate->format('Y-m-d').'.txt"');
+    }
+
     private function getWeeklyGroupedTransactions(string $startDate, string $endDate): Collection
     {
         $transactions = $this->getTansactionsByDateRange($startDate, $endDate);
