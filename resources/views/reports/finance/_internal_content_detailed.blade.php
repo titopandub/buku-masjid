@@ -24,7 +24,7 @@
             <tr class="{{ $transaction->is_strong ? 'strong' : '' }}">
                 <td class="text-center text-nowrap">{{ Carbon\Carbon::parse($transaction->date)->isoFormat('DD MMM YYYY') }}</td>
                 <td {{ $transaction->is_strong ? 'style=text-decoration:underline' : '' }} class="{{ $transaction->is_strong ? 'strong' : '' }}">
-                    {!! $transaction->date_alert !!} {{ $transaction->description }}
+                    {!! $transaction->date_alert !!} {!! nl2br(htmlentities($transaction->description)) !!}
                 </td>
                 <td class="text-right {{ $transaction->is_strong ? 'strong' : '' }}">{{ $transaction->in_out ? format_number($transaction->amount) : '' }}</td>
                 <td class="text-right {{ $transaction->is_strong ? 'strong' : '' }}">{{ !$transaction->in_out ? format_number($transaction->amount) : '' }}</td>
@@ -35,7 +35,7 @@
     </tbody>
     <tfoot>
         <tr>
-            <td colspan="2" class="text-right strong">{{ __('app.total') }} {{ __('time.week') }} {{ $weekNumber }}</td>
+            <td colspan="2" class="text-right strong">{{ __('app.total') }} {{ __('time.week') }} {{ $weekNumber + 1 }}</td>
             <td class="text-right strong">
                 @php
                     $incomeAmount = $weekTransactions->flatten()->sum(function ($transaction) {
@@ -55,7 +55,7 @@
             <td class="text-right strong text-nowrap">{{ format_number($incomeAmount - $spendingAmount) }}</td>
         </tr>
         <tr>
-            <td colspan="2" class="text-right strong">{{ __('transaction.end_balance') }} {{ __('time.week') }} {{ $weekNumber }}</td>
+            <td colspan="2" class="text-right strong">{{ __('transaction.end_balance') }} {{ __('time.week') }} {{ $weekNumber + 1 }}</td>
             <td class="text-right strong">&nbsp;</td>
             <td class="text-right strong">&nbsp;</td>
             <td class="text-right strong text-nowrap">{{ format_number($currentWeekBalance + $incomeAmount - $spendingAmount) }}</td>
