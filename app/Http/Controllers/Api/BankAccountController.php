@@ -10,6 +10,11 @@ use Illuminate\Support\Facades\Storage;
 
 class BankAccountController extends Controller
 {
+    public function index()
+    {
+        return BankAccount::where('is_active', 1)->orderBy('name')->get(['id', 'name', 'number', 'account_name']);
+    }
+
     public function updateQrisImage(Request $request, BankAccount $bankAccount)
     {
         $this->authorize('update', $bankAccount);

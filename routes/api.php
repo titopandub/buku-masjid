@@ -45,6 +45,16 @@ Route::group(['middleware' => 'auth:api', 'as' => 'api.', 'namespace' => 'Api'],
      * Books Endpoints
      */
     Route::apiResource('books', 'BookController')->names('books');
+
+    /*
+     * Partners Endpoints
+     */
+    Route::get('partners', 'PartnerController@index')->name('partners.index');
+
+    /*
+     * Bank Accounts Endpoints
+     */
+    Route::get('bank_accounts', 'BankAccountController@index')->name('bank_accounts.index');
 });
 
 // Authentication with sessions, specifically for AJAX from Blade.

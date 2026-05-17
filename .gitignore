@@ -16,4 +16,14 @@ yarn-error.log
 .phpunit.result.cache
 .phpunit.cache/
 .yarnrc.yml
+<<<<<<< HEAD
 /docs
+=======
+.env.script
+scripts/.token_cache.json
+oauth-*.key
+*.http
+/scripts
+.env.script.example
+.claude
+>>>>>>> a49c72d (feat: Add API endpoints for partners and bank accounts)
